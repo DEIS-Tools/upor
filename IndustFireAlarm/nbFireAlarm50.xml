@@ -1,0 +1,1816 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_2.dtd'>
+<nta>
+	<declaration>// Place global declarations here.
+clock xG;
+clock senSwitchClock;
+const int numChannels = 4;
+const int numSensors = 126;
+const int numRepeaters = 0+1; //we consider one repeater in the Zentralle
+const int numMediums = 1;
+const int directions = 2; // 
+const int A = 0; //one side of conection medium e.g. sensor to medium
+const int B = 1; //other side of conection to medium e.g. medium to repeater
+const int N = 126; //Number of Windows
+const int maxNumRep = 10;
+const int idZen = 0;
+
+
+
+int[0,3] chLZ=0, chCall=1, chRepLZ=2, chAlarm=3;
+
+typedef int[0,numChannels-1] id_chan;
+typedef int[0,numSensors] id_sensor;
+typedef int[0,N-1] id_fenster;
+typedef int[0,numRepeaters-1] id_repeater;
+typedef int[-1,numChannels-1] id_chanBlocked;
+typedef int[0,numMediums] id_medium;
+
+id_fenster curFs=0;
+
+//const int zyklus = 9576;
+const int zyklus = 9576-126;
+const int WS = zyklus / N; //Window Size
+const int tic = 1;
+const int sec = 64;	
+const int sec300 = sec * 300;
+const int sec100 = sec * 100;
+
+const int maxAssignFS1 = 6*(numRepeaters-1) + 1;
+const int maxAssignFS2 = 60 + maxAssignFS1;
+
+
+int[0,2] noSenLZ[numSensors];
+int[0,2] noRepLZ[numRepeaters];
+
+bool senOFF[numSensors];
+bool repOFF[numRepeaters];
+bool safe=true;
+
+
+//encoding the masters for sensors and repeaters 
+//Sensor at index i assign to topologySensors[i]    
+const int[0,numRepeaters] topologySensors[numSensors] = 
+{ 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+0, 0, 0, 0, 0, 0
+}; 
+const int[-1,numRepeaters] topologyRepeaters[numRepeaters] = {-1}; 
+
+
+id_sensor curSenId=0;
+id_sensor noLZsensor;
+id_repeater curRepId;
+
+//general windows time points
+const int TxFSb = WS*4/10;
+const int LzTx = TxFSb/2; //-korrekturwert
+const int RxFSa = TxFSb;   
+const int RxFSb = WS;
+const int delay = 1*tic;
+
+const int lz1 = 4;
+const int lz2 = 29;
+const int lz3 = 54;
+const int call = lz3 + 12;
+
+
+
+//time points relevant to repeaters
+const int waitAckTime = 14;
+const int RepLzTx = (RxFSb-RxFSa)/2 + RxFSa; //-korrekturwert
+const int repLz1 = 54;
+const int repLz2 = 4;
+const int repLz3 = 29;
+const int repAck1 = repLz1 + waitAckTime;
+const int repAck2 = repLz2 + waitAckTime;
+const int repAck3 = repLz3 + waitAckTime;
+const int Wa = 0;
+const int Wb = 25;
+const int Wc = 50;
+const int repCall = repLz3 + 12;
+
+
+
+id_chanBlocked blockedCh=-1;
+const int sec1 = 1000/15;
+//current model minimum sat blockedBound zyklus + 17;
+//const int blockedBound = zyklus + 17;
+
+const int blockedBound = zyklus;
+
+chan malfunc; 
+chan LZ[numMediums][numChannels][directions];
+chan ACK[numMediums][numChannels][directions];
+chan repLZ[numMediums][numChannels][directions];
+chan repACK[numMediums][numChannels][directions];
+//chan noLZ[numMediums][numChannels][directions];
+chan no2LZ[numMediums][numChannels][directions];
+chan no2RepLZ[numMediums][numChannels][directions];
+
+
+chan listen;
+chan okLZ[numRepeaters];
+chan noOkLZ[numRepeaters];
+chan noOkRepLZ[numRepeaters];
+
+broadcast chan startZyklus;
+
+//broadcast chan reset, goAlarm;
+/*
+int vTxFSb = TxFSb;
+int vLzTx = LzTx; //-korrekturwert
+int vRxFSa = RxFSa;   
+int vRxFSb = WS;
+int vdelay = delay;
+int vRepLzTx = RepLzTx;
+*/
+</declaration>
+	<template>
+		<name>chanCounter</name>
+		<declaration>clock x;
+
+
+</declaration>
+		<location id="id0" x="-160" y="64">
+			<name x="-170" y="34">c3</name>
+			<label kind="invariant" x="-184" y="80">x&lt;=zyklus</label>
+		</location>
+		<location id="id1" x="-160" y="-192">
+			<name x="-170" y="-222">c1</name>
+			<label kind="invariant" x="-192" y="-240">x&lt;=zyklus</label>
+		</location>
+		<location id="id2" x="0" y="-64">
+			<name x="-10" y="-94">c2</name>
+			<label kind="invariant" x="24" y="-72">x&lt;=zyklus</label>
+		</location>
+		<location id="id3" x="-320" y="-64">
+			<name x="-330" y="-94">c0</name>
+			<label kind="invariant" x="-416" y="-72">x&lt;=zyklus</label>
+		</location>
+		<init ref="id3"/>
+		<transition>
+			<source ref="id0"/>
+			<target ref="id3"/>
+			<label kind="guard" x="-328" y="-16">x&gt;=zyklus</label>
+			<label kind="synchronisation" x="-416" y="-24">startZyklus!</label>
+			<label kind="assignment" x="-552" y="0">x:=0, chLZ:=0, chCall:=1, chRepLZ:=2,chAlarm:=3,curRepId:=0, xG:=0</label>
+		</transition>
+		<transition>
+			<source ref="id2"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-32" y="-24">x&gt;=zyklus</label>
+			<label kind="synchronisation" x="-72" y="24">startZyklus!</label>
+			<label kind="assignment" x="-80" y="0">x:=0, chLZ:=3, chCall:=0, chRepLZ:=1,chAlarm:=2,curRepId:=0, xG:=0</label>
+		</transition>
+		<transition>
+			<source ref="id1"/>
+			<target ref="id2"/>
+			<label kind="guard" x="-72" y="-176">x&gt;=zyklus</label>
+			<label kind="synchronisation" x="-140" y="-143">startZyklus!</label>
+			<label kind="assignment" x="-96" y="-160">x:=0, chLZ:=2, chCall:=3, chRepLZ:=0,chAlarm:=1,curRepId:=0, xG:=0</label>
+		</transition>
+		<transition>
+			<source ref="id3"/>
+			<target ref="id1"/>
+			<label kind="guard" x="-312" y="-176">x&gt;=zyklus</label>
+			<label kind="synchronisation" x="-300" y="-143">startZyklus!</label>
+			<label kind="assignment" x="-560" y="-152">x:=0, chLZ:=1,chCall:=2,chRepLZ:=3,chAlarm:=0,curRepId:=0, xG:=0</label>
+		</transition>
+	</template>
+	<template>
+		<name>sensor</name>
+		<parameter>const id_sensor id, const id_medium idMed</parameter>
+		<declaration>const int FSa = WS * id;
+const int FSb = FSa + WS;
+
+const int lz1i = id*WS + 4;
+const int lz2i = id*WS + 29;
+const int lz3i = id*WS + 54;
+const int calli = lz3i + 12;
+
+clock x;
+
+//DEBUG variables 
+/*
+int vlz1i = lz1i;
+int vlz2i = lz2i;
+int vlz3i = lz3i;
+int vcalli = lz3i + 12;
+int vFSa = FSa;
+int vFSb = FSb;
+int vTxFSbi = TxFSbi;
+int vLzTxi = LzTxi;
+int vRxFSbi = RxFSbi;
+*/</declaration>
+		<location id="id4" x="-744" y="-408">
+			<label kind="invariant" x="-720" y="-416">x&lt;=lz3i+delay</label>
+		</location>
+		<location id="id5" x="-960" y="-408">
+			<label kind="invariant" x="-912" y="-432">x&lt;=calli</label>
+		</location>
+		<location id="id6" x="-648" y="-576">
+			<label kind="invariant" x="-624" y="-584">x&lt;=lz2i+delay</label>
+		</location>
+		<location id="id7" x="-744" y="-496">
+			<label kind="invariant" x="-720" y="-496">x&lt;=lz3i</label>
+		</location>
+		<location id="id8" x="-1072" y="-640">
+			<label kind="invariant" x="-1120" y="-672">x &lt;= calli</label>
+		</location>
+		<location id="id9" x="-648" y="-640">
+			<label kind="invariant" x="-680" y="-672">x &lt;= lz2i</label>
+		</location>
+		<location id="id10" x="-1072" y="-296">
+			<label kind="invariant" x="-1120" y="-288">x&lt;=zyklus</label>
+		</location>
+		<location id="id11" x="-448" y="-640">
+			<label kind="invariant" x="-480" y="-672">x&lt;=lz1i+delay</label>
+		</location>
+		<location id="id12" x="-448" y="-288">
+			<label kind="invariant" x="-480" y="-272">x &lt;= lz1i</label>
+		</location>
+		<init ref="id12"/>
+		<transition>
+			<source ref="id5"/>
+			<target ref="id8"/>
+			<label kind="guard" x="-1040" y="-464">x &gt;=calli</label>
+			<nail x="-1000" y="-416"/>
+		</transition>
+		<transition>
+			<source ref="id5"/>
+			<target ref="id8"/>
+			<label kind="synchronisation" x="-1016" y="-512">ACK[idMed][chCall][A]?</label>
+			<nail x="-960" y="-520"/>
+		</transition>
+		<transition>
+			<source ref="id4"/>
+			<target ref="id5"/>
+			<label kind="synchronisation" x="-920" y="-400">LZ[idMed][chCall][A]!</label>
+			<label kind="assignment" x="-888" y="-384">curSenId:=id</label>
+		</transition>
+		<transition>
+			<source ref="id7"/>
+			<target ref="id4"/>
+			<label kind="guard" x="-808" y="-464">x &gt;=lz3i</label>
+		</transition>
+		<transition>
+			<source ref="id7"/>
+			<target ref="id8"/>
+			<label kind="synchronisation" x="-1040" y="-616">ACK[idMed][chAlarm][A]?</label>
+		</transition>
+		<transition>
+			<source ref="id6"/>
+			<target ref="id7"/>
+			<label kind="synchronisation" x="-672" y="-544">LZ[idMed][chAlarm][A]!</label>
+			<label kind="assignment" x="-680" y="-528">curSenId:=id</label>
+		</transition>
+		<transition>
+			<source ref="id9"/>
+			<target ref="id6"/>
+			<label kind="guard" x="-848" y="-632">x &gt;= lz2i</label>
+		</transition>
+		<transition>
+			<source ref="id8"/>
+			<target ref="id10"/>
+		</transition>
+		<transition>
+			<source ref="id9"/>
+			<target ref="id8"/>
+			<label kind="synchronisation" x="-888" y="-664">ACK[idMed][chLZ][A]?</label>
+		</transition>
+		<transition>
+			<source ref="id11"/>
+			<target ref="id9"/>
+			<label kind="synchronisation" x="-616" y="-664">LZ[idMed][chLZ][A]!</label>
+			<label kind="assignment" x="-616" y="-688">curSenId:=id</label>
+		</transition>
+		<transition>
+			<source ref="id10"/>
+			<target ref="id12"/>
+			<label kind="guard" x="-799" y="-314">x&gt;=zyklus</label>
+			<label kind="assignment" x="-773" y="-289">x:=0</label>
+		</transition>
+		<transition>
+			<source ref="id12"/>
+			<target ref="id11"/>
+			<label kind="guard" x="-424" y="-488">x&gt;=lz1i</label>
+		</transition>
+	</template>
+	<template>
+		<name>sensorSwitcher</name>
+		<parameter>const id_sensor id</parameter>
+		<declaration>//clock y;</declaration>
+		<location id="id13" x="192" y="-104">
+		</location>
+		<location id="id14" x="-96" y="-96">
+		</location>
+		<init ref="id14"/>
+		<transition>
+			<source ref="id14"/>
+			<target ref="id13"/>
+			<label kind="guard" x="8" y="-232">!senOFF[id]</label>
+			<label kind="assignment" x="-24" y="-208">senOFF[id]:=true, senSwitchClock:=0</label>
+			<nail x="40" y="-176"/>
+		</transition>
+		<transition>
+			<source ref="id13"/>
+			<target ref="id14"/>
+			<label kind="assignment" x="-72" y="-40">senOFF[id]:=false, senSwitchClock:=0</label>
+			<nail x="48" y="-48"/>
+		</transition>
+	</template>
+	<template>
+		<name>repeaterSwitcher</name>
+		<parameter>const id_repeater id</parameter>
+		<declaration>clock y;</declaration>
+		<location id="id15" x="192" y="-104">
+		</location>
+		<location id="id16" x="-96" y="-96">
+		</location>
+		<init ref="id16"/>
+		<transition>
+			<source ref="id16"/>
+			<target ref="id15"/>
+			<label kind="guard" x="8" y="-232">!repOFF[id]</label>
+			<label kind="assignment" x="-24" y="-208">repOFF[id]:=true, y:=0</label>
+			<nail x="40" y="-176"/>
+		</transition>
+		<transition>
+			<source ref="id15"/>
+			<target ref="id16"/>
+			<label kind="synchronisation" x="24" y="-16">malfunc?</label>
+			<label kind="assignment" x="-8" y="-40">repOFF[id]:=false, y:=0</label>
+			<nail x="48" y="-48"/>
+		</transition>
+	</template>
+	<template>
+		<name>zenControl</name>
+		<parameter>const id_repeater id</parameter>
+		<declaration>clock x;</declaration>
+		<location id="id17" x="176" y="32">
+			<label kind="invariant" x="166" y="47">x&lt;=RxFSb</label>
+		</location>
+		<location id="id18" x="168" y="-104">
+		</location>
+		<location id="id19" x="-376" y="96">
+			<name x="-416" y="112">repMalfunction</name>
+			<urgent/>
+		</location>
+		<location id="id20" x="-384" y="-288">
+			<name x="-394" y="-318">senMalfunction</name>
+			<urgent/>
+		</location>
+		<location id="id21" x="-232" y="-104">
+			<label kind="invariant" x="-256" y="-80">x&lt;=RxFSb-1</label>
+		</location>
+		<init ref="id21"/>
+		<transition>
+			<source ref="id17"/>
+			<target ref="id21"/>
+			<label kind="guard" x="-64" y="8">x&gt;=RxFSb</label>
+			<label kind="assignment" x="-168" y="40">curFs:=((curFs+1)%N), x:=0, safe:=true</label>
+			<nail x="-164" y="28"/>
+		</transition>
+		<transition>
+			<source ref="id18"/>
+			<target ref="id17"/>
+			<label kind="guard" x="16" y="-72">curFs==60</label>
+			<label kind="assignment" x="8" y="-56">curRepId:=0</label>
+			<nail x="104" y="-40"/>
+		</transition>
+		<transition>
+			<source ref="id18"/>
+			<target ref="id17"/>
+			<label kind="guard" x="240" y="-80">curFs!=60</label>
+			<nail x="264" y="-40"/>
+		</transition>
+		<transition>
+			<source ref="id21"/>
+			<target ref="id18"/>
+			<label kind="guard" x="-48" y="-176">x&gt;=RxFSb-1</label>
+			<label kind="assignment" x="-56" y="-192">safe:=false</label>
+			<nail x="-48" y="-232"/>
+		</transition>
+		<transition>
+			<source ref="id19"/>
+			<target ref="id21"/>
+			<nail x="-384" y="88"/>
+			<nail x="-456" y="-72"/>
+		</transition>
+		<transition>
+			<source ref="id20"/>
+			<target ref="id21"/>
+			<label kind="assignment" x="-560" y="-248">senSwitchClock := 0</label>
+			<nail x="-448" y="-152"/>
+		</transition>
+		<transition>
+			<source ref="id21"/>
+			<target ref="id19"/>
+			<label kind="synchronisation" x="-360" y="-19">noOkRepLZ[id]?</label>
+		</transition>
+		<transition>
+			<source ref="id21"/>
+			<target ref="id20"/>
+			<label kind="synchronisation" x="-368" y="-211">noOkLZ[id]?</label>
+		</transition>
+	</template>
+	<template>
+		<name>repControl</name>
+		<parameter>const id_repeater id, const id_medium idMedUp</parameter>
+		<location id="id22" x="-240" y="72">
+			<urgent/>
+		</location>
+		<location id="id23" x="-248" y="-288">
+			<urgent/>
+		</location>
+		<location id="id24" x="-232" y="-104">
+		</location>
+		<init ref="id24"/>
+		<transition>
+			<source ref="id22"/>
+			<target ref="id24"/>
+			<label kind="synchronisation" x="-128" y="-40">no2RepLZ[idMedUp][chAlarm][A]!</label>
+			<label kind="assignment" x="-128" y="-16">curRepId:=id</label>
+			<nail x="-136" y="-24"/>
+		</transition>
+		<transition>
+			<source ref="id24"/>
+			<target ref="id22"/>
+			<label kind="synchronisation" x="-424" y="-40">noOkRepLZ[id]?</label>
+			<nail x="-316" y="-29"/>
+		</transition>
+		<transition>
+			<source ref="id23"/>
+			<target ref="id24"/>
+			<label kind="synchronisation" x="-144" y="-224">no2LZ[idMedUp][chAlarm][A]!</label>
+			<label kind="assignment" x="-152" y="-240">curRepId:=id</label>
+			<nail x="-152" y="-200"/>
+		</transition>
+		<transition>
+			<source ref="id24"/>
+			<target ref="id23"/>
+			<label kind="synchronisation" x="-416" y="-200">noOkLZ[id]?</label>
+			<nail x="-336" y="-192"/>
+		</transition>
+	</template>
+	<template>
+		<name>medLZ</name>
+		<parameter>const id_medium id</parameter>
+		<location id="id25" x="-96" y="-296">
+			<urgent/>
+		</location>
+		<location id="id26" x="-304" y="-24">
+			<urgent/>
+		</location>
+		<location id="id27" x="128" y="-24">
+			<urgent/>
+		</location>
+		<location id="id28" x="-88" y="-24">
+		</location>
+		<init ref="id28"/>
+		<transition>
+			<source ref="id25"/>
+			<target ref="id28"/>
+			<label kind="guard" x="0" y="-248">chAlarm == blockedCh || senOFF[curSenId]</label>
+			<nail x="40" y="-192"/>
+		</transition>
+		<transition>
+			<source ref="id25"/>
+			<target ref="id28"/>
+			<label kind="guard" x="-176" y="-176">chAlarm != blockedCh &amp;&amp; !senOFF[curSenId]</label>
+			<label kind="synchronisation" x="-152" y="-208">LZ[id][chAlarm][B]!</label>
+			<nail x="-16" y="-192"/>
+		</transition>
+		<transition>
+			<source ref="id28"/>
+			<target ref="id25"/>
+			<label kind="synchronisation" x="-304" y="-224">LZ[id][chAlarm][A]?</label>
+			<nail x="-184" y="-184"/>
+		</transition>
+		<transition>
+			<source ref="id26"/>
+			<target ref="id28"/>
+			<label kind="guard" x="-384" y="128">chCall == blockedCh || senOFF[curSenId]</label>
+			<nail x="-272" y="120"/>
+			<nail x="-120" y="120"/>
+		</transition>
+		<transition>
+			<source ref="id26"/>
+			<target ref="id28"/>
+			<label kind="guard" x="-368" y="64">chCall != blockedCh &amp;&amp; !senOFF[curSenId]</label>
+			<label kind="synchronisation" x="-256" y="40">LZ[id][chCall][B]!</label>
+			<nail x="-200" y="40"/>
+		</transition>
+		<transition>
+			<source ref="id28"/>
+			<target ref="id26"/>
+			<label kind="synchronisation" x="-280" y="-128">LZ[id][chCall][A]?</label>
+			<nail x="-208" y="-104"/>
+		</transition>
+		<transition>
+			<source ref="id27"/>
+			<target ref="id28"/>
+			<label kind="guard" x="-24" y="128">chLZ == blockedCh || senOFF[curSenId]</label>
+			<nail x="88" y="120"/>
+			<nail x="-24" y="120"/>
+		</transition>
+		<transition>
+			<source ref="id27"/>
+			<target ref="id28"/>
+			<label kind="guard" x="-40" y="64">chLZ != blockedCh &amp;&amp; !senOFF[curSenId]</label>
+			<label kind="synchronisation" x="-24" y="40">LZ[id][chLZ][B]!</label>
+			<nail x="24" y="40"/>
+		</transition>
+		<transition>
+			<source ref="id28"/>
+			<target ref="id27"/>
+			<label kind="synchronisation" x="40" y="-120">LZ[id][chLZ][A]?</label>
+			<nail x="16" y="-104"/>
+		</transition>
+	</template>
+	<template>
+		<name>medACK</name>
+		<parameter>const id_medium id</parameter>
+		<location id="id29" x="-32" y="-248">
+			<urgent/>
+		</location>
+		<location id="id30" x="-240" y="0">
+			<urgent/>
+		</location>
+		<location id="id31" x="200" y="0">
+			<urgent/>
+		</location>
+		<location id="id32" x="-16" y="0">
+		</location>
+		<init ref="id32"/>
+		<transition>
+			<source ref="id29"/>
+			<target ref="id32"/>
+			<label kind="guard" x="16" y="-240">chAlarm == blockedCh || senOFF[curSenId]</label>
+			<nail x="56" y="-192"/>
+		</transition>
+		<transition>
+			<source ref="id29"/>
+			<target ref="id32"/>
+			<label kind="guard" x="-88" y="-152">chAlarm != blockedCh &amp;&amp; !senOFF[curSenId]</label>
+			<label kind="synchronisation" x="-88" y="-176">ACK[id][chAlarm][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id32"/>
+			<target ref="id29"/>
+			<label kind="synchronisation" x="-224" y="-216">ACK[id][chAlarm][B]?</label>
+			<nail x="-112" y="-176"/>
+		</transition>
+		<transition>
+			<source ref="id30"/>
+			<target ref="id32"/>
+			<label kind="guard" x="-304" y="96">chCall == blockedCh || senOFF[curSenId]</label>
+			<nail x="-192" y="88"/>
+			<nail x="-48" y="88"/>
+		</transition>
+		<transition>
+			<source ref="id30"/>
+			<target ref="id32"/>
+			<label kind="guard" x="-304" y="-40">chCall != blockedCh &amp;&amp; !senOFF[curSenId]</label>
+			<label kind="synchronisation" x="-200" y="8">ACK[id][chCall][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id32"/>
+			<target ref="id30"/>
+			<label kind="synchronisation" x="-208" y="-104">ACK[id][chCall][B]?</label>
+			<nail x="-80" y="-80"/>
+			<nail x="-192" y="-80"/>
+		</transition>
+		<transition>
+			<source ref="id31"/>
+			<target ref="id32"/>
+			<label kind="guard" x="56" y="96">chLZ == blockedCh || senOFF[curSenId]</label>
+			<nail x="152" y="80"/>
+			<nail x="48" y="80"/>
+		</transition>
+		<transition>
+			<source ref="id31"/>
+			<target ref="id32"/>
+			<label kind="guard" x="32" y="-40">chLZ != blockedCh &amp;&amp; !senOFF[curSenId]</label>
+			<label kind="synchronisation" x="48" y="0">ACK[id][chLZ][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id32"/>
+			<target ref="id31"/>
+			<label kind="synchronisation" x="48" y="-104">ACK[id][chLZ][B]?</label>
+			<nail x="40" y="-80"/>
+			<nail x="152" y="-80"/>
+		</transition>
+	</template>
+	<template>
+		<name>medRepLZ</name>
+		<parameter>const id_medium id</parameter>
+		<location id="id33" x="-80" y="-320">
+			<urgent/>
+		</location>
+		<location id="id34" x="-304" y="-24">
+			<urgent/>
+		</location>
+		<location id="id35" x="128" y="-24">
+			<urgent/>
+		</location>
+		<location id="id36" x="-88" y="-24">
+		</location>
+		<init ref="id36"/>
+		<transition>
+			<source ref="id33"/>
+			<target ref="id36"/>
+			<label kind="guard" x="8" y="-200">chCall==blockedCh || repOFF[curRepId]</label>
+			<nail x="0" y="-184"/>
+		</transition>
+		<transition>
+			<source ref="id33"/>
+			<target ref="id36"/>
+			<label kind="guard" x="-232" y="-200">chCall!=blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-144" y="-187">repLZ[id][chCall][B]!</label>
+		</transition>
+		<transition>
+			<source ref="id36"/>
+			<target ref="id33"/>
+			<label kind="synchronisation" x="-264" y="-240">repLZ[id][chCall][A]?</label>
+			<nail x="-96" y="-40"/>
+			<nail x="-144" y="-184"/>
+		</transition>
+		<transition>
+			<source ref="id34"/>
+			<target ref="id36"/>
+			<label kind="guard" x="-368" y="128">chAlarm == blockedCh || repOFF[curRepId]</label>
+			<nail x="-272" y="120"/>
+			<nail x="-120" y="120"/>
+		</transition>
+		<transition>
+			<source ref="id34"/>
+			<target ref="id36"/>
+			<label kind="guard" x="-400" y="56">chAlarm != blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-272" y="40">repLZ[id][chAlarm][B]!</label>
+			<nail x="-200" y="40"/>
+		</transition>
+		<transition>
+			<source ref="id36"/>
+			<target ref="id34"/>
+			<label kind="synchronisation" x="-288" y="-136">repLZ[id][chAlarm][A]?</label>
+			<nail x="-208" y="-104"/>
+		</transition>
+		<transition>
+			<source ref="id35"/>
+			<target ref="id36"/>
+			<label kind="guard" x="-24" y="128">chRepLZ == blockedCh || repOFF[curRepId]</label>
+			<nail x="88" y="120"/>
+			<nail x="-24" y="120"/>
+		</transition>
+		<transition>
+			<source ref="id35"/>
+			<target ref="id36"/>
+			<label kind="guard" x="-56" y="56">chRepLZ != blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-24" y="40">repLZ[id][chRepLZ][B]!</label>
+			<nail x="24" y="40"/>
+		</transition>
+		<transition>
+			<source ref="id36"/>
+			<target ref="id35"/>
+			<label kind="synchronisation" x="-32" y="-120">repLZ[id][chRepLZ][A]?</label>
+			<nail x="16" y="-104"/>
+		</transition>
+	</template>
+	<template>
+		<name>medRepACK</name>
+		<parameter>const id_medium id</parameter>
+		<location id="id37" x="-8" y="-264">
+			<urgent/>
+		</location>
+		<location id="id38" x="-272" y="0">
+			<urgent/>
+		</location>
+		<location id="id39" x="240" y="0">
+			<urgent/>
+		</location>
+		<location id="id40" x="0" y="0">
+		</location>
+		<init ref="id40"/>
+		<transition>
+			<source ref="id37"/>
+			<target ref="id40"/>
+			<label kind="guard" x="32" y="-232">chCall==blockedCh || repOFF[curRepId]</label>
+			<nail x="72" y="-176"/>
+		</transition>
+		<transition>
+			<source ref="id37"/>
+			<target ref="id40"/>
+			<label kind="guard" x="-136" y="-160">chCall!=blockedCh  &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-72" y="-176">repACK[id][chCall][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id40"/>
+			<target ref="id37"/>
+			<label kind="synchronisation" x="-192" y="-240">repACK[id][chCall][B]?</label>
+			<nail x="-88" y="-192"/>
+		</transition>
+		<transition>
+			<source ref="id38"/>
+			<target ref="id40"/>
+			<label kind="guard" x="-304" y="88">chAlarm == blockedCh || repOFF[curRepId]</label>
+			<nail x="-192" y="88"/>
+			<nail x="-48" y="88"/>
+		</transition>
+		<transition>
+			<source ref="id38"/>
+			<target ref="id40"/>
+			<label kind="guard" x="-344" y="-32">chAlarm != blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-200" y="8">repACK[id][chAlarm][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id40"/>
+			<target ref="id38"/>
+			<label kind="synchronisation" x="-200" y="-128">repACK[id][chAlarm][B]?</label>
+			<nail x="-80" y="-104"/>
+			<nail x="-192" y="-104"/>
+		</transition>
+		<transition>
+			<source ref="id39"/>
+			<target ref="id40"/>
+			<label kind="guard" x="40" y="88">chRepLZ == blockedCh || repOFF[curRepId]</label>
+			<nail x="152" y="80"/>
+			<nail x="48" y="80"/>
+		</transition>
+		<transition>
+			<source ref="id39"/>
+			<target ref="id40"/>
+			<label kind="guard" x="56" y="-32">chRepLZ != blockedCh  &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="48" y="0">repACK[id][chRepLZ][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id40"/>
+			<target ref="id39"/>
+			<label kind="synchronisation" x="48" y="-120">repACK[id][chRepLZ][B]?</label>
+			<nail x="64" y="-96"/>
+			<nail x="168" y="-96"/>
+		</transition>
+	</template>
+	<template>
+		<name>medNo2LZ</name>
+		<parameter>const id_medium id</parameter>
+		<location id="id41" x="-96" y="-224">
+			<urgent/>
+		</location>
+		<location id="id42" x="-304" y="-24">
+			<urgent/>
+		</location>
+		<location id="id43" x="128" y="-24">
+			<urgent/>
+		</location>
+		<location id="id44" x="-88" y="-24">
+		</location>
+		<init ref="id44"/>
+		<transition>
+			<source ref="id41"/>
+			<target ref="id44"/>
+			<label kind="guard" x="-48" y="-208">chCall != blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-40" y="-232">no2LZ[id][chCall][B]!</label>
+			<nail x="-24" y="-160"/>
+		</transition>
+		<transition>
+			<source ref="id41"/>
+			<target ref="id44"/>
+			<label kind="guard" x="-216" y="-168">chCall == blockedCh || repOFF[curRepId]</label>
+		</transition>
+		<transition>
+			<source ref="id44"/>
+			<target ref="id41"/>
+			<label kind="synchronisation" x="-288" y="-208">no2LZ[id][chCall][A]?</label>
+			<nail x="-168" y="-168"/>
+		</transition>
+		<transition>
+			<source ref="id42"/>
+			<target ref="id44"/>
+			<label kind="guard" x="-400" y="128">chAlarm == blockedCh || repOFF[curRepId]</label>
+			<nail x="-272" y="120"/>
+			<nail x="-120" y="120"/>
+		</transition>
+		<transition>
+			<source ref="id42"/>
+			<target ref="id44"/>
+			<label kind="guard" x="-360" y="56">chAlarm != blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-256" y="40">no2LZ[id][chAlarm][B]!</label>
+			<nail x="-200" y="40"/>
+		</transition>
+		<transition>
+			<source ref="id44"/>
+			<target ref="id42"/>
+			<label kind="synchronisation" x="-296" y="-128">no2LZ[id][chAlarm][A]?</label>
+			<nail x="-208" y="-104"/>
+		</transition>
+		<transition>
+			<source ref="id43"/>
+			<target ref="id44"/>
+			<label kind="guard" x="-56" y="128">chRepLZ == blockedCh || repOFF[curRepId]</label>
+			<nail x="88" y="120"/>
+			<nail x="-24" y="120"/>
+		</transition>
+		<transition>
+			<source ref="id43"/>
+			<target ref="id44"/>
+			<label kind="guard" x="-32" y="56">chRepLZ != blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-24" y="40">no2LZ[id][chLZ][B]!</label>
+			<nail x="24" y="40"/>
+		</transition>
+		<transition>
+			<source ref="id44"/>
+			<target ref="id43"/>
+			<label kind="synchronisation" x="-32" y="-120">no2LZ[id][chLZ][A]?</label>
+			<nail x="16" y="-104"/>
+		</transition>
+	</template>
+	<template>
+		<name>medNo2RepLZ</name>
+		<parameter>const id_medium id</parameter>
+		<location id="id45" x="-96" y="-224">
+			<urgent/>
+		</location>
+		<location id="id46" x="-304" y="-24">
+			<urgent/>
+		</location>
+		<location id="id47" x="128" y="-24">
+			<urgent/>
+		</location>
+		<location id="id48" x="-88" y="-24">
+		</location>
+		<init ref="id48"/>
+		<transition>
+			<source ref="id45"/>
+			<target ref="id48"/>
+			<label kind="guard" x="-48" y="-208">chCall != blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-56" y="-232">no2RepLZ[id][chCall][B]!</label>
+			<nail x="-24" y="-160"/>
+		</transition>
+		<transition>
+			<source ref="id45"/>
+			<target ref="id48"/>
+			<label kind="guard" x="-160" y="-168">chCall == blockedCh || repOFF[curRepId]</label>
+		</transition>
+		<transition>
+			<source ref="id48"/>
+			<target ref="id45"/>
+			<label kind="synchronisation" x="-288" y="-208">no2RepLZ[id][chCall][A]?</label>
+			<nail x="-168" y="-168"/>
+		</transition>
+		<transition>
+			<source ref="id46"/>
+			<target ref="id48"/>
+			<label kind="guard" x="-376" y="128">chAlarm == blockedCh || repOFF[curRepId]</label>
+			<nail x="-272" y="120"/>
+			<nail x="-120" y="120"/>
+		</transition>
+		<transition>
+			<source ref="id46"/>
+			<target ref="id48"/>
+			<label kind="guard" x="-376" y="64">chAlarm != blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-256" y="40">no2RepLZ[id][chAlarm][B]!</label>
+			<nail x="-200" y="40"/>
+		</transition>
+		<transition>
+			<source ref="id48"/>
+			<target ref="id46"/>
+			<label kind="synchronisation" x="-296" y="-128">no2RepLZ[id][chAlarm][A]?</label>
+			<nail x="-208" y="-104"/>
+		</transition>
+		<transition>
+			<source ref="id47"/>
+			<target ref="id48"/>
+			<label kind="guard" x="-48" y="128">chRepLZ == blockedCh || repOFF[curRepId]</label>
+			<nail x="88" y="120"/>
+			<nail x="-24" y="120"/>
+		</transition>
+		<transition>
+			<source ref="id47"/>
+			<target ref="id48"/>
+			<label kind="guard" x="-40" y="64">chRepLZ != blockedCh &amp;&amp; !repOFF[curRepId]</label>
+			<label kind="synchronisation" x="-24" y="40">no2RepLZ[id][chRepLZ][B]!</label>
+			<nail x="24" y="40"/>
+		</transition>
+		<transition>
+			<source ref="id48"/>
+			<target ref="id47"/>
+			<label kind="synchronisation" x="-32" y="-120">no2RepLZ[id][chRepLZ][A]?</label>
+			<nail x="16" y="-104"/>
+		</transition>
+	</template>
+	<template>
+		<name>repTR1</name>
+		<parameter>const id_repeater id, const id_medium idMedUp, const id_medium idMedDown</parameter>
+		<declaration>clock x;
+bool LZrec=false;
+</declaration>
+		<location id="id49" x="-592" y="352" color="#ffa500">
+			<name x="-624" y="368">malfunction</name>
+			<urgent/>
+		</location>
+		<location id="id50" x="-352" y="272">
+			<urgent/>
+		</location>
+		<location id="id51" x="-752" y="144">
+			<label kind="invariant" x="-762" y="159">x&lt;=RxFSb</label>
+		</location>
+		<location id="id52" x="-288" y="-120">
+			<urgent/>
+		</location>
+		<location id="id53" x="-416" y="-120">
+			<urgent/>
+		</location>
+		<location id="id54" x="-288" y="0">
+			<urgent/>
+		</location>
+		<location id="id55" x="-824" y="-120">
+			<urgent/>
+		</location>
+		<location id="id56" x="-560" y="0">
+			<label kind="invariant" x="-570" y="15">x&lt;=call</label>
+		</location>
+		<location id="id57" x="-688" y="-120">
+			<urgent/>
+		</location>
+		<location id="id58" x="-560" y="-120">
+			<urgent/>
+		</location>
+		<location id="id59" x="-976" y="-120">
+			<urgent/>
+		</location>
+		<location id="id60" x="-824" y="0">
+			<label kind="invariant" x="-848" y="16">x&lt;=lz3</label>
+		</location>
+		<location id="id61" x="-1056" y="0">
+			<label kind="invariant" x="-1080" y="16">x&lt;=lz2</label>
+		</location>
+		<init ref="id61"/>
+		<transition>
+			<source ref="id49"/>
+			<target ref="id51"/>
+			<label kind="synchronisation" x="-744" y="232">noOkLZ[id]!</label>
+			<label kind="assignment" x="-760" y="256">noSenLZ[curFs]:=0</label>
+		</transition>
+		<transition>
+			<source ref="id50"/>
+			<target ref="id51"/>
+			<label kind="guard" x="-600" y="168">noSenLZ[curFs]&lt;2</label>
+			<nail x="-464" y="232"/>
+			<nail x="-648" y="168"/>
+		</transition>
+		<transition>
+			<source ref="id50"/>
+			<target ref="id49"/>
+			<label kind="guard" x="-464" y="304">noSenLZ[curFs]&gt;=2</label>
+		</transition>
+		<transition>
+			<source ref="id54"/>
+			<target ref="id50"/>
+			<label kind="guard" x="-416" y="152">!LZrec &amp;&amp; curFs&lt;numSensors &amp;&amp; topologySensors[curFs]==id</label>
+			<label kind="assignment" x="-368" y="128">noLZsensor:=curFs, noSenLZ[curFs]++</label>
+		</transition>
+		<transition>
+			<source ref="id54"/>
+			<target ref="id51"/>
+			<label kind="guard" x="-776" y="48">LZrec || curFs&gt;=numSensors || (curFs&lt;numSensors &amp;&amp; topologySensors[curFs]!=id)</label>
+			<nail x="-480" y="40"/>
+		</transition>
+		<transition>
+			<source ref="id51"/>
+			<target ref="id61"/>
+			<label kind="guard" x="-896" y="72">x&gt;=RxFSb</label>
+			<label kind="assignment" x="-952" y="104">x:=0, LZrec:=false</label>
+			<nail x="-864" y="104"/>
+			<nail x="-952" y="64"/>
+		</transition>
+		<transition>
+			<source ref="id52"/>
+			<target ref="id54"/>
+			<label kind="assignment" x="-304" y="-88">LZrec:=true, noSenLZ[curFs]:=0</label>
+		</transition>
+		<transition>
+			<source ref="id53"/>
+			<target ref="id52"/>
+			<label kind="synchronisation" x="-416" y="-160">ACK[idMedDown][chCall][B]!</label>
+		</transition>
+		<transition>
+			<source ref="id56"/>
+			<target ref="id53"/>
+			<label kind="synchronisation" x="-480" y="-72">LZ[idMedDown][chCall][B]?</label>
+		</transition>
+		<transition>
+			<source ref="id56"/>
+			<target ref="id54"/>
+			<label kind="guard" x="-464" y="-24">x&gt;=call</label>
+		</transition>
+		<transition>
+			<source ref="id55"/>
+			<target ref="id60"/>
+			<label kind="assignment" x="-864" y="-88">LZrec:=true, noSenLZ[curFs]:=0</label>
+		</transition>
+		<transition>
+			<source ref="id59"/>
+			<target ref="id55"/>
+			<label kind="synchronisation" x="-992" y="-160">ACK[idMedDown][chLZ][B]!</label>
+		</transition>
+		<transition>
+			<source ref="id60"/>
+			<target ref="id56"/>
+			<label kind="guard" x="-720" y="-24">x &gt;= lz3</label>
+		</transition>
+		<transition>
+			<source ref="id58"/>
+			<target ref="id56"/>
+			<label kind="assignment" x="-616" y="-88">LZrec:=true, noSenLZ[curFs]:=0</label>
+		</transition>
+		<transition>
+			<source ref="id57"/>
+			<target ref="id58"/>
+			<label kind="synchronisation" x="-704" y="-160">ACK[idMedDown][chAlarm][B]!</label>
+		</transition>
+		<transition>
+			<source ref="id60"/>
+			<target ref="id57"/>
+			<label kind="synchronisation" x="-760" y="-56">LZ[idMedDown][chAlarm][B]?</label>
+		</transition>
+		<transition>
+			<source ref="id61"/>
+			<target ref="id60"/>
+			<label kind="guard" x="-952" y="-24">x&gt;=lz2</label>
+		</transition>
+		<transition>
+			<source ref="id61"/>
+			<target ref="id59"/>
+			<label kind="synchronisation" x="-1016" y="-56">LZ[idMedDown][chLZ][B]?</label>
+		</transition>
+	</template>
+	<template>
+		<name>repTR2</name>
+		<parameter>const id_repeater id, const id_medium idMedUp, const id_medium idMedDown</parameter>
+		<declaration>clock x;
+const int[0,N] myLZFS[4] = {id*6,id*6+1,(id*6)+maxNumRep*6,(id*6+1)+maxNumRep*6};
+bool repLzRec=false;
+bool slaveLzRec=false;
+bool repMalfunction=false;
+
+bool inRepTopology()
+{
+  return exists (i : int[0,numRepeaters-1]) topologyRepeaters[i]==curFs;
+}
+
+bool inDomainFS()
+{
+  return (curFs&lt;=maxAssignFS1 || (curFs&gt;=60 &amp;&amp; curFs&lt;=maxAssignFS2));
+}
+</declaration>
+		<location id="id62" x="960" y="464">
+			<urgent/>
+		</location>
+		<location id="id63" x="544" y="144">
+			<urgent/>
+		</location>
+		<location id="id64" x="1272" y="280">
+			<urgent/>
+		</location>
+		<location id="id65" x="224" y="520" color="#ffa500">
+			<name x="248" y="520">malfunction</name>
+			<urgent/>
+		</location>
+		<location id="id66" x="-176" y="312">
+			<urgent/>
+		</location>
+		<location id="id67" x="-48" y="520">
+			<urgent/>
+		</location>
+		<location id="id68" x="408" y="312">
+			<label kind="invariant" x="392" y="328">x&lt;=Wc</label>
+		</location>
+		<location id="id69" x="664" y="296">
+			<urgent/>
+		</location>
+		<location id="id70" x="-720" y="144">
+			<urgent/>
+		</location>
+		<location id="id71" x="-240" y="104">
+			<urgent/>
+		</location>
+		<location id="id72" x="160" y="-160">
+			<label kind="invariant" x="120" y="-144">x&lt;=repLz1-1</label>
+		</location>
+		<location id="id73" x="1088" y="-296">
+			<label kind="invariant" x="1064" y="-280">x&lt;=repAck1</label>
+		</location>
+		<location id="id74" x="320" y="-288">
+			<label kind="invariant" x="304" y="-272">x&lt;=repLz1+delay</label>
+		</location>
+		<location id="id75" x="160" y="-288">
+			<label kind="invariant" x="120" y="-272">x&lt;=repLz1</label>
+		</location>
+		<location id="id76" x="-32" y="-288">
+			<label kind="invariant" x="-32" y="-280">x&lt;=repAck3</label>
+		</location>
+		<location id="id77" x="-272" y="-288">
+			<label kind="invariant" x="-282" y="-273">x&lt;=repLz3+delay</label>
+		</location>
+		<location id="id78" x="-424" y="-288">
+			<label kind="invariant" x="-464" y="-320">x&lt;=repLz3</label>
+		</location>
+		<location id="id79" x="-424" y="-160">
+			<label kind="invariant" x="-440" y="-152">x&lt;=repLz3 - 1</label>
+		</location>
+		<location id="id80" x="160" y="0">
+			<urgent/>
+		</location>
+		<location id="id81" x="1096" y="0">
+			<label kind="invariant" x="1064" y="16">x&lt;=RxFSb</label>
+		</location>
+		<location id="id82" x="-24" y="0">
+			<label kind="invariant" x="-8" y="-8">x&lt;=repAck3</label>
+		</location>
+		<location id="id83" x="-424" y="0">
+			<urgent/>
+		</location>
+		<location id="id84" x="-656" y="-288">
+			<label kind="invariant" x="-632" y="-296">x&lt;=repAck2</label>
+		</location>
+		<location id="id85" x="-904" y="-288">
+			<label kind="invariant" x="-976" y="-272">x&lt;=repLz2+delay</label>
+		</location>
+		<location id="id86" x="-1080" y="-288">
+			<label kind="invariant" x="-1176" y="-296">x&lt;=repLz2</label>
+		</location>
+		<location id="id87" x="-1080" y="-160">
+			<label kind="invariant" x="-1200" y="-168">x&lt;=repLz2 - 1</label>
+		</location>
+		<location id="id88" x="-640" y="0">
+			<label kind="invariant" x="-640" y="8">x&lt;=Wb</label>
+		</location>
+		<location id="id89" x="-1080" y="0">
+			<urgent/>
+		</location>
+		<init ref="id89"/>
+		<transition>
+			<source ref="id62"/>
+			<target ref="id81"/>
+			<label kind="guard" x="876" y="358">id==idZen</label>
+			<label kind="synchronisation" x="876" y="373">noOkLZ[id]!</label>
+			<nail x="952" y="448"/>
+			<nail x="920" y="328"/>
+		</transition>
+		<transition>
+			<source ref="id62"/>
+			<target ref="id81"/>
+			<label kind="guard" x="1008" y="312">id!=idZen</label>
+			<label kind="synchronisation" x="968" y="336">no2LZ[idMedUp][chAlarm][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id81"/>
+			<target ref="id62"/>
+			<label kind="synchronisation" x="656" y="344">no2LZ[idMedDown][chAlarm][B]?</label>
+			<nail x="832" y="352"/>
+		</transition>
+		<transition>
+			<source ref="id63"/>
+			<target ref="id81"/>
+			<label kind="synchronisation" x="616" y="72">noOkRepLZ[id]!</label>
+		</transition>
+		<transition>
+			<source ref="id80"/>
+			<target ref="id63"/>
+			<label kind="guard" x="344" y="48">repMalfunction</label>
+		</transition>
+		<transition>
+			<source ref="id64"/>
+			<target ref="id81"/>
+			<label kind="guard" x="1176" y="56">id==idZen</label>
+			<label kind="synchronisation" x="1152" y="72">noOkRepLZ[id]!</label>
+			<nail x="1296" y="144"/>
+		</transition>
+		<transition>
+			<source ref="id64"/>
+			<target ref="id81"/>
+			<label kind="guard" x="1184" y="152">id!=idZen</label>
+			<label kind="synchronisation" x="1136" y="168">no2RepLZ[idMedUp][chAlarm][A]!</label>
+			<label kind="assignment" x="1152" y="128">curRepId:=id</label>
+		</transition>
+		<transition>
+			<source ref="id81"/>
+			<target ref="id64"/>
+			<label kind="synchronisation" x="1088" y="240">no2RepLZ[idMedDown][chAlarm][B]?</label>
+			<nail x="1104" y="184"/>
+		</transition>
+		<transition>
+			<source ref="id66"/>
+			<target ref="id68"/>
+			<label kind="guard" x="-176" y="168">(curFs&gt;maxAssignFS1 &amp;&amp; curFs&lt;60) || curFs&gt;maxAssignFS2</label>
+			<nail x="-32" y="168"/>
+		</transition>
+		<transition>
+			<source ref="id66"/>
+			<target ref="id68"/>
+			<label kind="guard" x="-40" y="240">curFs%6!=1</label>
+			<nail x="-24" y="256"/>
+		</transition>
+		<transition>
+			<source ref="id67"/>
+			<target ref="id68"/>
+			<label kind="guard" x="120" y="320">noRepLZ[curRepId]&lt;2</label>
+		</transition>
+		<transition>
+			<source ref="id65"/>
+			<target ref="id68"/>
+			<label kind="assignment" x="224" y="448">noRepLZ[curRepId]:=0, repMalfunction:=true</label>
+		</transition>
+		<transition>
+			<source ref="id67"/>
+			<target ref="id65"/>
+			<label kind="guard" x="120" y="400">noRepLZ[curRepId]&gt;=2</label>
+		</transition>
+		<transition>
+			<source ref="id66"/>
+			<target ref="id67"/>
+			<label kind="guard" x="-496" y="328">!slaveLzRec &amp;&amp; topologyRepeaters[curRepId]==id &amp;&amp; (curFs%6==1) &amp;&amp; inDomainFS()</label>
+			<label kind="assignment" x="-280" y="360">noRepLZ[curRepId]++</label>
+		</transition>
+		<transition>
+			<source ref="id66"/>
+			<target ref="id68"/>
+			<label kind="guard" x="-80" y="200">topologyRepeaters[curRepId]!=id</label>
+			<nail x="-24" y="216"/>
+		</transition>
+		<transition>
+			<source ref="id66"/>
+			<target ref="id68"/>
+			<label kind="guard" x="-88" y="264">slaveLzRec &amp;&amp; topologyRepeaters[curRepId]==id</label>
+			<label kind="assignment" x="-56" y="288">noRepLZ[curRepId]:=0</label>
+		</transition>
+		<transition>
+			<source ref="id82"/>
+			<target ref="id66"/>
+			<label kind="guard" x="-40" y="32">x&gt;=repAck3</label>
+		</transition>
+		<transition>
+			<source ref="id71"/>
+			<target ref="id82"/>
+			<label kind="synchronisation" x="-312" y="112">repACK[idMedDown][chCall][B]!</label>
+			<nail x="-104" y="104"/>
+		</transition>
+		<transition>
+			<source ref="id68"/>
+			<target ref="id80"/>
+			<label kind="guard" x="360" y="216">x&gt;=Wc</label>
+			<label kind="assignment" x="80" y="136">slaveLzRec:=false, repLzRec:=false</label>
+		</transition>
+		<transition>
+			<source ref="id69"/>
+			<target ref="id81"/>
+			<label kind="synchronisation" x="504" y="184">repACK[idMedDown][chAlarm][B]!</label>
+			<nail x="656" y="176"/>
+		</transition>
+		<transition>
+			<source ref="id81"/>
+			<target ref="id69"/>
+			<label kind="synchronisation" x="664" y="208">repLZ[idMedDown][chAlarm][B]?</label>
+			<label kind="assignment" x="760" y="192">slaveLzRec:=true</label>
+		</transition>
+		<transition>
+			<source ref="id70"/>
+			<target ref="id88"/>
+			<label kind="synchronisation" x="-728" y="176">repACK[idMedDown][chRepLZ][B]!</label>
+			<nail x="-616" y="144"/>
+		</transition>
+		<transition>
+			<source ref="id88"/>
+			<target ref="id70"/>
+			<label kind="synchronisation" x="-936" y="80">repLZ[idMedDown][chRepLZ][B]?</label>
+			<label kind="assignment" x="-856" y="96">slaveLzRec:=true</label>
+		</transition>
+		<transition>
+			<source ref="id82"/>
+			<target ref="id71"/>
+			<label kind="synchronisation" x="-368" y="40">repLZ[idMedDown][chCall][B]?</label>
+			<label kind="assignment" x="-304" y="56">slaveLzRec:=true</label>
+		</transition>
+		<transition>
+			<source ref="id72"/>
+			<target ref="id75"/>
+			<label kind="guard" x="104" y="-224">x&gt;=repLz1-1</label>
+		</transition>
+		<transition>
+			<source ref="id80"/>
+			<target ref="id72"/>
+			<label kind="guard" x="80" y="-72">(myLZFS[0]==curFs || myLZFS[2]==curFs) &amp;&amp; id != idZen &amp;&amp; !repLzRec &amp;&amp; !repMalfunction</label>
+			<label kind="assignment" x="104" y="-88">curRepId:=id</label>
+		</transition>
+		<transition>
+			<source ref="id81"/>
+			<target ref="id89"/>
+			<label kind="guard" x="-320" y="-440">x&gt;=RxFSb</label>
+			<label kind="assignment" x="-304" y="-464">x:=0, repMalfunction:=false</label>
+			<nail x="1248" y="0"/>
+			<nail x="1248" y="-416"/>
+			<nail x="-1344" y="-416"/>
+			<nail x="-1344" y="0"/>
+		</transition>
+		<transition>
+			<source ref="id73"/>
+			<target ref="id81"/>
+			<label kind="synchronisation" x="1072" y="-160">repACK[idMedUp][chAlarm][A]?</label>
+			<label kind="assignment" x="1104" y="-176">repLzRec:=true</label>
+			<nail x="1176" y="-168"/>
+		</transition>
+		<transition>
+			<source ref="id73"/>
+			<target ref="id81"/>
+			<label kind="guard" x="920" y="-184">x&gt;=repAck1</label>
+			<label kind="assignment" x="888" y="-168">repLzRec:=false</label>
+			<nail x="1016" y="-160"/>
+		</transition>
+		<transition>
+			<source ref="id74"/>
+			<target ref="id73"/>
+			<label kind="synchronisation" x="396" y="-303">repLZ[idMedUp][chAlarm][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id75"/>
+			<target ref="id74"/>
+			<label kind="guard" x="180" y="-318">x&gt;=repLz1</label>
+		</transition>
+		<transition>
+			<source ref="id75"/>
+			<target ref="id81"/>
+			<label kind="synchronisation" x="336" y="-160">listen?</label>
+			<nail x="480" y="-224"/>
+		</transition>
+		<transition>
+			<source ref="id80"/>
+			<target ref="id81"/>
+			<label kind="guard" x="208" y="-24">(!(myLZFS[0]==curFs || myLZFS[2]==curFs)|| id==idZen || repLzRec) &amp;&amp; !repMalfunction</label>
+		</transition>
+		<transition>
+			<source ref="id83"/>
+			<target ref="id82"/>
+			<label kind="guard" x="-448" y="-24">!(myLZFS[1]==curFs || myLZFS[3]==curFs) || id == idZen || repLzRec</label>
+		</transition>
+		<transition>
+			<source ref="id78"/>
+			<target ref="id82"/>
+			<label kind="synchronisation" x="-288" y="-159">listen?</label>
+			<nail x="-208" y="-152"/>
+		</transition>
+		<transition>
+			<source ref="id76"/>
+			<target ref="id82"/>
+			<label kind="synchronisation" x="-56" y="-176">repACK[idMedUp][chCall][A]?</label>
+			<label kind="assignment" x="-24" y="-160">repLzRec:=true</label>
+			<nail x="24" y="-144"/>
+		</transition>
+		<transition>
+			<source ref="id76"/>
+			<target ref="id82"/>
+			<label kind="guard" x="-168" y="-232">x&gt;=repAck3</label>
+			<label kind="assignment" x="-192" y="-208">repLzRec:=false</label>
+			<nail x="-96" y="-144"/>
+		</transition>
+		<transition>
+			<source ref="id77"/>
+			<target ref="id76"/>
+			<label kind="synchronisation" x="-256" y="-312">repLZ[idMedUp][chCall][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id78"/>
+			<target ref="id77"/>
+			<label kind="guard" x="-376" y="-312">x&gt;=repLz3</label>
+		</transition>
+		<transition>
+			<source ref="id79"/>
+			<target ref="id78"/>
+			<label kind="guard" x="-520" y="-232">x&gt;=repLz3-1</label>
+		</transition>
+		<transition>
+			<source ref="id83"/>
+			<target ref="id79"/>
+			<label kind="guard" x="-484" y="-110">(myLZFS[1]==curFs || myLZFS[3]==curFs) &amp;&amp; id != idZen &amp;&amp; !repLzRec</label>
+			<label kind="assignment" x="-484" y="-80">curRepId:=id</label>
+		</transition>
+		<transition>
+			<source ref="id88"/>
+			<target ref="id83"/>
+			<label kind="guard" x="-544" y="-24">x&gt;=Wb</label>
+		</transition>
+		<transition>
+			<source ref="id84"/>
+			<target ref="id88"/>
+			<label kind="synchronisation" x="-680" y="-160">repACK[idMedUp][chRepLZ][A]?</label>
+			<label kind="assignment" x="-600" y="-144">repLzRec:=true</label>
+			<nail x="-608" y="-160"/>
+		</transition>
+		<transition>
+			<source ref="id84"/>
+			<target ref="id88"/>
+			<label kind="guard" x="-776" y="-224">x&gt;=repAck2</label>
+			<label kind="assignment" x="-808" y="-208">repLzRec:=false</label>
+			<nail x="-704" y="-160"/>
+		</transition>
+		<transition>
+			<source ref="id85"/>
+			<target ref="id84"/>
+			<label kind="synchronisation" x="-888" y="-320">repLZ[idMedUp][chRepLZ][A]!</label>
+		</transition>
+		<transition>
+			<source ref="id86"/>
+			<target ref="id85"/>
+			<label kind="guard" x="-1040" y="-312">x&gt;=repLz2</label>
+		</transition>
+		<transition>
+			<source ref="id86"/>
+			<target ref="id88"/>
+			<label kind="synchronisation" x="-936" y="-168">listen?</label>
+			<nail x="-896" y="-176"/>
+		</transition>
+		<transition>
+			<source ref="id87"/>
+			<target ref="id86"/>
+			<label kind="guard" x="-1184" y="-224">x&gt;=repLz2-1</label>
+		</transition>
+		<transition>
+			<source ref="id89"/>
+			<target ref="id88"/>
+			<label kind="guard" x="-1200" y="-32">(!(myLZFS[1]==curFs || myLZFS[3]==curFs) || id == idZen || repLzRec) &amp;&amp; safe</label>
+		</transition>
+		<transition>
+			<source ref="id89"/>
+			<target ref="id87"/>
+			<label kind="guard" x="-1288" y="-104">(myLZFS[1]==curFs || myLZFS[3]==curFs) &amp;&amp; id != idZen &amp;&amp; !repLzRec</label>
+			<label kind="assignment" x="-1140" y="-80">curRepId:=id</label>
+		</transition>
+	</template>
+	<template>
+		<name>chanBlockerOver</name>
+		<declaration>clock x;</declaration>
+		<location id="id90" x="152" y="-72">
+		</location>
+		<location id="id91" x="-184" y="-72">
+			<label kind="invariant" x="-224" y="-56">x&lt;=sec1</label>
+		</location>
+		<init ref="id91"/>
+		<transition>
+			<source ref="id91"/>
+			<target ref="id90"/>
+			<label kind="assignment" x="-88" y="-256">blockedCh:=-1, x:=0</label>
+			<nail x="-168" y="-232"/>
+			<nail x="120" y="-232"/>
+		</transition>
+		<transition>
+			<source ref="id91"/>
+			<target ref="id90"/>
+			<label kind="assignment" x="-88" y="-208">blockedCh:=3, x:=0</label>
+			<nail x="-168" y="-192"/>
+			<nail x="128" y="-192"/>
+		</transition>
+		<transition>
+			<source ref="id91"/>
+			<target ref="id90"/>
+			<label kind="assignment" x="-80" y="-168">blockedCh:=2, x:=0</label>
+			<nail x="-168" y="-152"/>
+			<nail x="128" y="-152"/>
+		</transition>
+		<transition>
+			<source ref="id91"/>
+			<target ref="id90"/>
+			<label kind="assignment" x="-80" y="-128">blockedCh:=1, x:=0</label>
+			<nail x="-168" y="-112"/>
+			<nail x="112" y="-112"/>
+		</transition>
+		<transition>
+			<source ref="id90"/>
+			<target ref="id91"/>
+			<label kind="guard" x="-40" y="-16">x&gt;=sec1</label>
+			<label kind="assignment" x="-24" y="0">x:=0</label>
+			<nail x="112" y="0"/>
+			<nail x="-120" y="0"/>
+		</transition>
+		<transition>
+			<source ref="id91"/>
+			<target ref="id90"/>
+			<label kind="assignment" x="-80" y="-88">blockedCh:=0, x:=0</label>
+		</transition>
+	</template>
+	<template>
+		<name>chanBlockerOverNew</name>
+		<declaration>clock x;</declaration>
+		<location id="id92" x="-160" y="-304">
+			<name x="-152" y="-296">BLOCKED</name>
+		</location>
+		<location id="id93" x="-344" y="-216">
+			<name x="-392" y="-168">INIT_BLOCKED</name>
+		</location>
+		<location id="id94" x="-328" y="-384">
+			<name x="-344" y="-432">FREE</name>
+			<label kind="invariant" x="-352" y="-416">x &lt;= sec1</label>
+		</location>
+		<location id="id95" x="-488" y="-296">
+			<urgent/>
+		</location>
+		<init ref="id95"/>
+		<transition>
+			<source ref="id93"/>
+			<target ref="id94"/>
+			<label kind="assignment" x="-448" y="-320">blockedCh := -1,
+x := 0</label>
+			<nail x="-344" y="-360"/>
+		</transition>
+		<transition>
+			<source ref="id92"/>
+			<target ref="id92"/>
+			<label kind="select" x="-128" y="-440">ch: id_chan</label>
+			<label kind="guard" x="-128" y="-384">x &gt;= sec1</label>
+			<label kind="assignment" x="-128" y="-424">blockedCh := ch,
+x := 0</label>
+			<nail x="-48" y="-304"/>
+			<nail x="-48" y="-384"/>
+			<nail x="-136" y="-384"/>
+		</transition>
+		<transition>
+			<source ref="id92"/>
+			<target ref="id94"/>
+			<label kind="guard" x="-280" y="-328">x &gt;= sec1</label>
+			<label kind="assignment" x="-304" y="-304">blockedCh := -1,
+x := 0</label>
+			<nail x="-328" y="-304"/>
+		</transition>
+		<transition>
+			<source ref="id94"/>
+			<target ref="id92"/>
+			<label kind="select" x="-272" y="-408">ch: id_chan</label>
+			<label kind="assignment" x="-280" y="-384">blockedCh := ch,
+x:=0</label>
+			<nail x="-160" y="-384"/>
+		</transition>
+		<transition>
+			<source ref="id93"/>
+			<target ref="id92"/>
+			<label kind="select" x="-296" y="-240">ch:id_chan</label>
+			<label kind="assignment" x="-296" y="-216">blockedCh := ch,
+x := 0</label>
+			<nail x="-160" y="-216"/>
+		</transition>
+		<transition>
+			<source ref="id95"/>
+			<target ref="id93"/>
+			<label kind="select" x="-464" y="-240">ch : id_chan</label>
+			<label kind="assignment" x="-480" y="-216">blockedCh := ch</label>
+			<nail x="-488" y="-216"/>
+		</transition>
+		<transition>
+			<source ref="id95"/>
+			<target ref="id94"/>
+			<label kind="assignment" x="-472" y="-384">blockedCh := -1,
+x:=0</label>
+			<nail x="-488" y="-384"/>
+		</transition>
+	</template>
+	<system>// Place template instantiations here.
+/*
+SIGNATURES
+repControl: const id_repeater id, const id_medium idMedUp
+repTR1 : const id_repeater id, const id_medium idMedUp, const id_medium idMedDown
+repTR2 : const id_repeater id, const id_medium idMedUp, const id_medium idMedDown
+med_ : const id_medium id
+sensor: const id_sensor id, const id_medium idMed
+zenControl: const id_repeater id
+*/
+chanCount = chanCounter();
+senSwitcher =  sensorSwitcher(1);
+repSwitcher =  repeaterSwitcher(2);
+
+
+sensor0 = sensor(0,0);
+sensor1 = sensor(1,0);
+sensor2 = sensor(2,0);
+sensor3 = sensor(3,0);
+sensor4 = sensor(4,0);
+sensor5 = sensor(5,0);
+sensor6 = sensor(6,0);
+sensor7 = sensor(7,0);
+sensor8 = sensor(8,0);
+sensor9 = sensor(9,0);
+sensor10 = sensor(10,0);
+sensor11 = sensor(11,0);
+sensor12 = sensor(12,0);
+sensor13 = sensor(13,0);
+sensor14 = sensor(14,0);
+sensor15 = sensor(15,0);
+sensor16 = sensor(16,0);
+sensor17 = sensor(17,0);
+sensor18 = sensor(18,0);
+sensor19 = sensor(19,0);
+sensor20 = sensor(20,0);
+sensor21 = sensor(21,0);
+sensor22 = sensor(22,0);
+sensor23 = sensor(23,0);
+sensor24 = sensor(24,0);
+sensor25 = sensor(25,0);
+sensor26 = sensor(26,0);
+sensor27 = sensor(27,0);
+sensor28 = sensor(28,0);
+sensor29 = sensor(29,0);
+sensor30 = sensor(30,0);
+sensor31 = sensor(31,0);
+sensor32 = sensor(32,0);
+sensor33 = sensor(33,0);
+sensor34 = sensor(34,0);
+sensor35 = sensor(35,0);
+sensor36 = sensor(36,0);
+sensor37 = sensor(37,0);
+sensor38 = sensor(38,0);
+sensor39 = sensor(39,0);
+sensor40 = sensor(40,0);
+sensor41 = sensor(41,0);
+sensor42 = sensor(42,0);
+sensor43 = sensor(43,0);
+sensor44 = sensor(44,0);
+sensor45 = sensor(45,0);
+sensor46 = sensor(46,0);
+sensor47 = sensor(47,0);
+sensor48 = sensor(48,0);
+sensor49 = sensor(49,0);
+sensor50 = sensor(50,0);
+sensor51 = sensor(51,0);
+sensor52 = sensor(52,0);
+sensor53 = sensor(53,0);
+sensor54 = sensor(54,0);
+sensor55 = sensor(55,0);
+sensor56 = sensor(56,0);
+sensor57 = sensor(57,0);
+sensor58 = sensor(58,0);
+sensor59 = sensor(59,0);
+sensor60 = sensor(60,0);
+sensor61 = sensor(61,0);
+sensor62 = sensor(62,0);
+sensor63 = sensor(63,0);
+sensor64 = sensor(64,0);
+sensor65 = sensor(65,0);
+sensor66 = sensor(66,0);
+sensor67 = sensor(67,0);
+sensor68 = sensor(68,0);
+sensor69 = sensor(69,0);
+sensor70 = sensor(70,0);
+sensor71 = sensor(71,0);
+sensor72 = sensor(72,0);
+sensor73 = sensor(73,0);
+sensor74 = sensor(74,0);
+sensor75 = sensor(75,0);
+sensor76 = sensor(76,0);
+sensor77 = sensor(77,0);
+sensor78 = sensor(78,0);
+sensor79 = sensor(79,0);
+sensor80 = sensor(80,0);
+sensor81 = sensor(81,0);
+sensor82 = sensor(82,0);
+sensor83 = sensor(83,0);
+sensor84 = sensor(84,0);
+sensor85 = sensor(85,0);
+sensor86 = sensor(86,0);
+sensor87 = sensor(87,0);
+sensor88 = sensor(88,0);
+sensor89 = sensor(89,0);
+sensor90 = sensor(90,0);
+sensor91 = sensor(91,0);
+sensor92 = sensor(92,0);
+sensor93 = sensor(93,0);
+sensor94 = sensor(94,0);
+sensor95 = sensor(95,0);
+sensor96 = sensor(96,0);
+sensor97 = sensor(97,0);
+sensor98 = sensor(98,0);
+sensor99 = sensor(99,0);
+sensor100 = sensor(100,0);
+sensor101 = sensor(101,0);
+sensor102 = sensor(102,0);
+sensor103 = sensor(103,0);
+sensor104 = sensor(104,0);
+sensor105 = sensor(105,0);
+sensor106 = sensor(106,0);
+sensor107 = sensor(107,0);
+sensor108 = sensor(108,0);
+sensor109 = sensor(109,0);
+sensor110 = sensor(110,0);
+sensor111 = sensor(111,0);
+sensor112 = sensor(112,0);
+sensor113 = sensor(113,0);
+sensor114 = sensor(114,0);
+sensor115 = sensor(115,0);
+sensor116 = sensor(116,0);
+sensor117 = sensor(117,0);
+sensor118 = sensor(118,0);
+sensor119 = sensor(119,0);
+sensor120 = sensor(120,0);
+sensor121 = sensor(121,0);
+sensor122 = sensor(122,0);
+sensor123 = sensor(123,0);
+sensor124 = sensor(124,0);
+sensor125 = sensor(125,0);
+
+/*
+sensor2 = sensor(2,0);
+sensor5 = sensor(5,0);
+sensor6 = sensor(6,0);
+sensor7 = sensor(7,0);
+sensor8 = sensor(8,0);
+sensor9 = sensor(9,0);
+*/
+
+zenCon = zenControl(0);
+zenTrans1 = repTR1(0,0,0);
+zenTrans2 = repTR2(0,0,0);
+
+med0LZ = medLZ(0);
+med0ACK = medACK(0);
+//med0RepLZ = medRepLZ(0);
+//med0RepACK = medRepACK(0);
+med0No2LZ = medNo2LZ(0);
+med0No2RepLZ = medNo2RepLZ(0);
+
+
+
+system 
+sensor0,sensor1,sensor2,sensor3,sensor4,
+sensor5,sensor6,
+sensor7,sensor8,
+sensor9,sensor10,
+sensor11,sensor12,
+sensor13,sensor14,
+sensor15,sensor16,
+sensor17,sensor18,
+sensor19,
+sensor20,sensor21,sensor22,sensor23,
+sensor24,sensor25,sensor26,sensor27,sensor28,sensor29,
+sensor30,sensor31,sensor32,sensor33,sensor34,sensor35,
+sensor36,sensor37,sensor38,sensor39,
+sensor40,sensor41,
+sensor42,sensor43,sensor44,sensor45,sensor46,sensor47,
+sensor48,sensor49,
+/*
+sensor50,sensor51,sensor52,sensor53,
+sensor54,sensor55,sensor56,sensor57,sensor58,sensor59,
+sensor60,sensor61,sensor62,sensor63,sensor64,sensor65,
+sensor66,sensor67,sensor68,sensor69,sensor70,sensor71,
+sensor72,sensor73,sensor74,sensor75,sensor76,sensor77,
+sensor78,sensor79,sensor80,sensor81,sensor82,sensor83,
+sensor84,sensor85,sensor86,sensor87,sensor88,sensor89,
+sensor90,sensor91,sensor92,sensor93,sensor94,sensor95,
+sensor96,sensor97,sensor98,sensor99,sensor100,sensor101,
+sensor102,sensor103,sensor104,sensor105,sensor106,sensor107,
+sensor108,sensor109,sensor110,sensor111,sensor112,sensor113,
+sensor114,sensor115,sensor116,sensor117,sensor118,sensor119,
+sensor120,sensor121,sensor122,sensor123,sensor124,sensor125,
+*/
+//	sensor5, sensor6, sensor7, sensor8, sensor9,
+	//chanBlockerOverNew,
+	senSwitcher, 
+//	repSwitcher, 
+	med0LZ, med0ACK, 
+    //med0RepLZ, med0RepACK, med0No2LZ, med0No2RepLZ,
+	zenCon, zenTrans1, zenTrans2,
+	chanCount;</system>
+	<queries>
+		<query>
+			<formula>A[] !zenCon.repMalfunction</formula>
+			<comment></comment>
+		</query>
+		<query>
+			<formula>A[] !zenCon.senMalfunction</formula>
+			<comment></comment>
+		</query>
+		<query>
+			<formula>A[] noRepLZ[2]&lt;1</formula>
+			<comment></comment>
+		</query>
+		<query>
+			<formula>A[] not deadlock</formula>
+			<comment></comment>
+		</query>
+		<query>
+			<formula></formula>
+			<comment></comment>
+		</query>
+		<query>
+			<formula>A[] (!zenCon.senMalfunction || senSwitchClock &lt;= (sec*300))</formula>
+			<comment></comment>
+		</query>
+	</queries>
+</nta>

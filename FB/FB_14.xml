@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_2.dtd'><nta><declaration>// Place global declarations here.
+
+//**** Modify depending the number of sensors ********
+const int numSensors :=14;
+//****************************************************
+
+int vmrd:=13, vtdp:=5, cnt:=0, type:=0;
+typedef int[1,numSensors] id_sensor;
+broadcast chan fromLink;
+
+
+broadcast chan toLink;</declaration><template><name x="5" y="5">DataNode</name><parameter>const id_sensor s</parameter><declaration>// Place local declarations here.
+clock tmrd;</declaration><location id="id0" x="416" y="-40"><name x="424" y="-72">hasToken</name><label kind="invariant" x="424" y="-24">tmrd&lt;=vmrd</label></location><location id="id1" x="104" y="-40"><name x="40" y="-72">noToken</name></location><init ref="id1"/><transition><source ref="id0"/><target ref="id0"/><label kind="guard" x="352" y="-120">tmrd&gt;=vmrd &amp;&amp; cnt&lt;(numSensors*2)</label><label kind="assignment" x="392" y="-104">tmrd:=0, cnt++</label><nail x="416" y="-80"/><nail x="520" y="-80"/><nail x="520" y="-40"/></transition><transition><source ref="id0"/><target ref="id1"/><label kind="guard" x="152" y="8">tmrd&gt;=vmrd &amp;&amp; cnt &gt;=(numSensors*2)</label><label kind="assignment" x="184" y="32">tmrd:=0</label><nail x="416" y="32"/><nail x="104" y="32"/></transition><transition><source ref="id1"/><target ref="id0"/><label kind="synchronisation" x="200" y="-64">fromLink?</label><label kind="assignment" x="208" y="-40">tmrd:=0</label><nail x="296" y="-40"/></transition></template><template><name>LinkMaster</name><declaration>clock  tirrd;</declaration><location id="id2" x="-184" y="104"><name x="-194" y="74">LM2</name><label kind="invariant" x="-194" y="119">tirrd&lt;=40</label></location><location id="id3" x="16" y="104"><name x="-32" y="72">acquiringToken</name><label kind="invariant" x="-32" y="120">tirrd&lt;=60</label></location><location id="id4" x="184" y="104"><name x="112" y="64">hasSchedulerToken</name><urgent/></location><location id="id5" x="272" y="104"><name x="262" y="74">off</name><committed/></location><location id="id6" x="-384" y="104"><name x="-394" y="74">LM1</name><label kind="invariant" x="-464" y="120">tirrd&lt;=20</label></location><init ref="id6"/><transition><source ref="id5"/><target ref="id6"/><label kind="assignment" x="-88" y="160">tirrd:=0</label><nail x="272" y="152"/><nail x="-384" y="152"/></transition><transition><source ref="id6"/><target ref="id2"/><label kind="guard" x="-344" y="74">tirrd&gt;=20</label><label kind="synchronisation" x="-304" y="112">toLink!</label></transition><transition><source ref="id2"/><target ref="id3"/><label kind="guard" x="-144" y="74">tirrd&gt;=40</label><label kind="synchronisation" x="-112" y="112">toLink!</label></transition><transition><source ref="id3"/><target ref="id4"/><label kind="guard" x="48" y="88">tirrd&gt;=60</label><label kind="synchronisation" x="80" y="112">toLink!</label><nail x="64" y="104"/></transition><transition><source ref="id4"/><target ref="id5"/></transition></template><template><name>MediumLayer</name><declaration>clock lt;</declaration><location id="id7" x="104" y="-48"><name x="-8" y="-32">Transmitting</name><label kind="invariant" x="94" y="-33">lt&lt;=20</label></location><location id="id8" x="16" y="-128"><committed/></location><location id="id9" x="-104" y="-128"><committed/></location><location id="id10" x="-256" y="-128"><name x="-264" y="-160">Receiving</name><committed/></location><location id="id11" x="-336" y="-48"><name x="-346" y="-78">Idle</name><label kind="invariant" x="-346" y="-33">lt&lt;=20</label></location><init ref="id11"/><transition><source ref="id7"/><target ref="id11"/><label kind="guard" x="-88" y="-72">lt&gt;=20</label><label kind="synchronisation" x="-176" y="-72">fromLink!</label><label kind="assignment" x="-128" y="-40">lt:=0</label><nail x="0" y="-48"/><nail x="-264" y="-48"/></transition><transition><source ref="id8"/><target ref="id7"/><nail x="104" y="-128"/></transition><transition><source ref="id9"/><target ref="id8"/></transition><transition><source ref="id10"/><target ref="id9"/><label kind="assignment" x="-216" y="-120">type:=0</label></transition><transition><source ref="id11"/><target ref="id10"/><label kind="synchronisation" x="-392" y="-112">toLink?</label><label kind="assignment" x="-328" y="-112">type:=5</label><nail x="-336" y="-128"/></transition></template><system>// Place template instantiations here.
+ 
+
+// List one or more processes to be composed into a system.
+system 
+DataNode, 
+MediumLayer, 
+LinkMaster
+;
+//&gt;&gt;(FB)
+//&lt;&lt;</system></nta>

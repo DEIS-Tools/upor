@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_2.dtd'>
+<nta>
+	<declaration>// Cascaded RideSharing Protocol
+// September 2011
+// Sergio A. Feo
+// Secure RideSharing v. 0.1
+
+// Coding conventions:
+// Global constants: CONSTANT_NAME
+// Global variables: gVariableName
+// Local constants: ConstantName
+// Local variables:  variableName
+// Channels: channel_name
+const int NODES = 5; // Number of nodes in the network (without the sink)
+
+const int MAX_FAIL = 3; // Number of link failures per node
+
+typedef int [0,NODES] T_A;
+typedef int[0,NODES-1] T_index;
+typedef int[0,MAX_FAIL] T_fail;
+
+const int SCHEDULE_LENGTH = 6;
+
+const int SCHEDULE[SCHEDULE_LENGTH+1] = {0,1,2,3,4,2,-1};
+
+int[0,SCHEDULE_LENGTH+1] gSlotCounter = 0;
+
+// Incidence matrix for the main links -- MAIN[i][j] is true iff Node i is a child of Node j
+const bool MAIN[NODES+1][NODES] = 
+{
+{0, 0, 0, 0, 0}, 
+{0, 0, 0, 0, 0}, 
+{1, 0, 0, 0, 0}, 
+{0, 1, 0, 0, 0}, 
+{0, 0, 0, 0, 0}, 
+{0, 0, 1, 1, 1}
+}
+;
+
+// Incidence matrix for the backup links -- BACKUP[i][j] is true iff Node i is a child of Node j
+const bool BACKUP[NODES][NODES] = 
+{
+{0, 0, 0, 0, 0}, 
+{0, 0, 0, 0, 0}, 
+{0, 1, 0, 0, 0}, 
+{1, 0, 0, 0, 0}, 
+{1, 1, 0, 0, 0}
+}
+;
+// Incidence matrix for the side links -- SIDE[i][j] is true iff Node i is a side child of Node j
+const bool SIDE[NODES][NODES] = 
+{ 
+{0, 0, 0, 0, 0}, 
+{0, 0, 0, 0, 0}, 
+{0, 0, 0, 0, 1}, 
+{0, 0, 1, 0, 0}, 
+{0, 0, 0, 1, 0}
+}
+;
+
+bool gP[NODES];
+bool gL_r[NODES];
+bool gL_e[NODES];
+T_A gA;
+T_index gID;
+T_fail gFailures[NODES];
+int[0,NODES] ready = 0;
+
+broadcast chan medium;</declaration>
+	<template>
+		<name>SinkNode</name>
+		<parameter>const int ID</parameter>
+		<declaration>int[0,1] P[NODES];
+T_A A_final = 0;
+T_A A_c[NODES];
+
+void update_child() {
+ A_c[gID] = gA;
+ for (j : T_index) {
+  P[j] |= gP[j];
+ }
+}
+
+void aggregate() {
+ for (j : T_index) {
+  A_final+=A_c[j];
+ }
+}
+clock timer;
+int[0,SCHEDULE_LENGTH+1] SlotCounter = 0;</declaration>
+		<location id="id0" x="-400" y="8">
+			<committed/>
+		</location>
+		<location id="id1" x="-760" y="8">
+			<urgent/>
+		</location>
+		<location id="id2" x="-760" y="8">
+			<urgent/>
+		</location>
+		<location id="id3" x="-520" y="8">
+			<name x="-568" y="-16">IDLE</name>
+			<label kind="invariant" x="-584" y="24">timer&lt;=1</label>
+		</location>
+		<location id="id4" x="-184" y="-88">
+			<name x="-168" y="-120">RCVD</name>
+			<urgent/>
+		</location>
+		<location id="id5" x="-336" y="-88">
+			<name x="-368" y="-120">RCV</name>
+			<urgent/>
+		</location>
+		<location id="id6" x="-760" y="120">
+			<name x="-824" y="112">DONE</name>
+		</location>
+		<location id="id7" x="-304" y="8">
+			<name x="-304" y="32">RCV_WAIT</name>
+		</location>
+		<init ref="id2"/>
+		<transition>
+			<source ref="id0"/>
+			<target ref="id7"/>
+			<label kind="assignment" x="-384" y="16">ready++</label>
+		</transition>
+		<transition>
+			<source ref="id2"/>
+			<target ref="id3"/>
+			<label kind="guard" x="-872" y="-32">SlotCounter &lt; SCHEDULE_LENGTH</label>
+		</transition>
+		<transition>
+			<source ref="id3"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-480" y="-16">timer&gt;=1</label>
+			<label kind="assignment" x="-480" y="16">timer:=0</label>
+		</transition>
+		<transition>
+			<source ref="id6"/>
+			<target ref="id6"/>
+			<nail x="-728" y="120"/>
+			<nail x="-728" y="152"/>
+			<nail x="-760" y="152"/>
+		</transition>
+		<transition>
+			<source ref="id4"/>
+			<target ref="id2"/>
+			<label kind="assignment" x="-584" y="-136">SlotCounter++</label>
+			<nail x="-184" y="-144"/>
+			<nail x="-624" y="-144"/>
+		</transition>
+		<transition>
+			<source ref="id5"/>
+			<target ref="id4"/>
+			<label kind="guard" x="-304" y="-112">MAIN[ID][gID]</label>
+			<label kind="assignment" x="-304" y="-88">update_child()</label>
+		</transition>
+		<transition>
+			<source ref="id5"/>
+			<target ref="id2"/>
+			<label kind="guard" x="-536" y="-72">!MAIN[ID][gID]</label>
+			<label kind="assignment" x="-600" y="-40">SlotCounter++</label>
+		</transition>
+		<transition>
+			<source ref="id7"/>
+			<target ref="id5"/>
+			<label kind="synchronisation" x="-328" y="-48">medium?</label>
+		</transition>
+		<transition>
+			<source ref="id2"/>
+			<target ref="id6"/>
+			<label kind="guard" x="-912" y="48">SlotCounter &gt;= SCHEDULE_LENGTH</label>
+			<label kind="assignment" x="-752" y="72">aggregate()</label>
+		</transition>
+	</template>
+	<template>
+		<name x="5" y="5">Node</name>
+		<parameter>const T_index ID</parameter>
+		<declaration>bool P[NODES];
+bool L_r[NODES];
+bool L_e[NODES];
+bool rec[NODES];
+bool P_c[NODES][NODES];
+T_A A_c[NODES];
+clock timer;
+int[0,SCHEDULE_LENGTH+1] SlotCounter = 0;
+
+void initialize()
+{
+ P[ID] = 1;
+ A_c[ID] = 1;
+}
+
+void update_child()
+{
+ rec[gID] = 1;
+ P_c[gID] = gP;
+ A_c[gID] = gA;
+}
+
+void update_side()
+{
+ for (j : T_index) { 
+  L_e[j] |= gL_e[j];
+  L_r[j] |= gL_r[j];
+ }
+}
+
+void aggregate()
+{
+ int j;
+ for (i : T_index) {
+  if (rec[i]) {  
+   if (MAIN[ID][i] || (BACKUP[ID][i] &amp;&amp; L_e[i] &amp;&amp; !L_r[i])) {
+    A_c[ID] += A_c[i];
+    L_r[i] = 1;
+    for (j : T_index)
+     P[j] |= P_c[i][j];
+   }
+   else {
+    L_e[i] = 0;
+    L_r[i] = 0;
+   }
+  } else if (MAIN[ID][i]) L_e[i] = 1;
+ }
+}
+
+</declaration>
+		<location id="id8" x="-1056" y="-72">
+			<name x="-1066" y="-106">Init</name>
+			<urgent/>
+		</location>
+		<location id="id9" x="-952" y="-72">
+			<label kind="invariant" x="-1040" y="-96">timer &lt;= 1</label>
+		</location>
+		<location id="id10" x="-808" y="88">
+			<urgent/>
+		</location>
+		<location id="id11" x="-808" y="-72">
+			<urgent/>
+		</location>
+		<location id="id12" x="-232" y="-168">
+			<urgent/>
+		</location>
+		<location id="id13" x="-232" y="-256">
+			<urgent/>
+		</location>
+		<location id="id14" x="-240" y="-96">
+			<urgent/>
+		</location>
+		<location id="id15" x="-352" y="-168">
+			<name x="-368" y="-200">RCV</name>
+			<urgent/>
+		</location>
+		<location id="id16" x="-952" y="88">
+			<name x="-968" y="104">SND</name>
+			<urgent/>
+		</location>
+		<location id="id17" x="-472" y="-72">
+			<name x="-544" y="-104">RCV_WAIT</name>
+		</location>
+		<init ref="id8"/>
+		<transition>
+			<source ref="id8"/>
+			<target ref="id9"/>
+		</transition>
+		<transition>
+			<source ref="id9"/>
+			<target ref="id11"/>
+			<label kind="guard" x="-896" y="-96">timer &gt;= 1</label>
+			<label kind="assignment" x="-920" y="-64">timer:=0</label>
+		</transition>
+		<transition>
+			<source ref="id16"/>
+			<target ref="id9"/>
+			<label kind="assignment" x="-1012" y="8">SlotCounter++</label>
+		</transition>
+		<transition>
+			<source ref="id11"/>
+			<target ref="id10"/>
+			<label kind="guard" x="-888" y="16">SCHEDULE[SlotCounter] == ID</label>
+			<label kind="assignment" x="-872" y="-8">initialize()</label>
+		</transition>
+		<transition>
+			<source ref="id11"/>
+			<target ref="id17"/>
+			<label kind="guard" x="-760" y="-96">SCHEDULE[SlotCounter] != ID</label>
+			<label kind="assignment" x="-700" y="-72">ready++</label>
+		</transition>
+		<transition>
+			<source ref="id12"/>
+			<target ref="id9"/>
+			<label kind="assignment" x="-528" y="16">update_side(),
+SlotCounter++</label>
+			<nail x="-200" y="-168"/>
+			<nail x="-200" y="8"/>
+			<nail x="-664" y="8"/>
+		</transition>
+		<transition>
+			<source ref="id15"/>
+			<target ref="id12"/>
+			<label kind="guard" x="-312" y="-200">SIDE[ID][gID]</label>
+		</transition>
+		<transition>
+			<source ref="id14"/>
+			<target ref="id9"/>
+			<label kind="assignment" x="-504" y="-32">update_child(),
+SlotCounter++</label>
+			<nail x="-240" y="-32"/>
+			<nail x="-640" y="-32"/>
+		</transition>
+		<transition>
+			<source ref="id13"/>
+			<target ref="id9"/>
+			<label kind="assignment" x="-512" y="-336">update_child(),
+SlotCounter++</label>
+			<nail x="-232" y="-312"/>
+			<nail x="-808" y="-312"/>
+		</transition>
+		<transition>
+			<source ref="id14"/>
+			<target ref="id9"/>
+			<label kind="assignment" x="-424" y="-72">gFailures[gID]++,
+SlotCounter++</label>
+			<nail x="-312" y="-48"/>
+			<nail x="-608" y="-48"/>
+		</transition>
+		<transition>
+			<source ref="id13"/>
+			<target ref="id9"/>
+			<label kind="assignment" x="-512" y="-280">gFailures[gID]++,
+SlotCounter++</label>
+			<nail x="-680" y="-256"/>
+		</transition>
+		<transition>
+			<source ref="id15"/>
+			<target ref="id9"/>
+			<label kind="guard" x="-672" y="-208">!BACKUP[ID][gID] &amp;&amp;
+!MAIN[ID][gID] &amp;&amp;
+!SIDE[ID][gID]</label>
+			<label kind="assignment" x="-508" y="-168">SlotCounter++</label>
+			<nail x="-544" y="-168"/>
+		</transition>
+		<transition>
+			<source ref="id15"/>
+			<target ref="id13"/>
+			<label kind="guard" x="-392" y="-240">BACKUP[ID][gID]</label>
+		</transition>
+		<transition>
+			<source ref="id15"/>
+			<target ref="id14"/>
+			<label kind="guard" x="-376" y="-128">MAIN[ID][gID]</label>
+		</transition>
+		<transition>
+			<source ref="id17"/>
+			<target ref="id15"/>
+			<label kind="synchronisation" x="-472" y="-136">medium?</label>
+		</transition>
+		<transition>
+			<source ref="id10"/>
+			<target ref="id16"/>
+			<label kind="guard" x="-928" y="96">ready==NODES</label>
+			<label kind="synchronisation" x="-912" y="64">medium!</label>
+			<label kind="assignment" x="-920" y="120">aggregate(),
+gP := P,
+gID := ID,
+gL_e := L_e,
+gL_r := L_r,
+gA = A_c[ID],
+ready:=0</label>
+		</transition>
+	</template>
+	<system>Sink = SinkNode(NODES);
+
+system 
+//&gt;&gt;(AGlessMaxFail)(AGnotDeadlock)
+//&lt;&lt;
+Sink,Node;</system>
+	<queries>
+		<query>
+			<formula></formula>
+			<comment></comment>
+		</query>
+	</queries>
+</nta>
