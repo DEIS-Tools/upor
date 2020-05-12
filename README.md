@@ -26,6 +26,7 @@ real    0m4,482s
 user    0m4,465s
 sys     0m0,017s
 ```
+Observe that the number of stored states is 65583 and the user CPU time 4430ms, or one can use the independent measurement by `time` utility which states 4.465s.
 
 Evaluate a deadlock check on the same instance with **Partial Order Reduction** turned on, set the environment variables `UPPAAL_UPOR` and `UPPAAL_REACHABLEACT`, for example:
 
@@ -41,3 +42,5 @@ Verifying formula 1 at FireAlarm/AGnotdeadlock.q:1
  -- Resident memory used : 11956 KiB
 0.02 user, 0.00 kernel, 0.02 elapsed, 0:00.02 wall-clock, 12244 kb_MaxRSS
 ```
+Observe that the number of states is 184, which is several orders of magnitute smaller than without reduction.
+Also the timing is just 10ms (or 0.02s as measured independently).
